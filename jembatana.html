@@ -1,0 +1,1483 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualisasi Konsep Jembatan — Toggle Spawn Kapal & Evakuasi Pejalan Kaki</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #090e1a; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #canvas-container { width: 100vw; height: 100vh; display: block; }
+
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 14px;
+            width: 14px;
+            border-radius: 50%;
+            background: #10b981;
+            cursor: pointer;
+            margin-top: -5px;
+            box-shadow: 0 0 8px rgba(16, 185, 129, 0.85);
+            border: 1.5px solid #ffffff;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #334155;
+            border-radius: 2px;
+        }
+        .glass-pill {
+            background: rgba(10, 17, 32, 0.72);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(52, 211, 153, 0.22);
+        }
+    </style>
+</head>
+<body class="text-slate-100 select-none">
+
+    <div id="canvas-container"></div>
+
+    <!-- Top Bar Minimalis -->
+    <div class="fixed top-2.5 left-2.5 right-2.5 z-10 flex items-center justify-between gap-2 pointer-events-none">
+        <div class="glass-pill px-3 py-1.5 rounded-full shadow-lg flex items-center gap-2 pointer-events-auto">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span class="text-xs font-bold text-slate-100 tracking-tight">Unknown Bridge</span>
+            <span class="hidden sm:inline text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-semibold">Kelompok 2</span>
+        </div>
+
+        <div id="top-actions" class="glass-pill px-2 py-1 rounded-full shadow-lg flex flex-wrap items-center gap-1 pointer-events-auto">
+            <button onclick="launchSkyFirework()" class="px-2 py-1 rounded-full text-[10px] font-semibold bg-pink-500/25 text-pink-300 hover:bg-pink-500/40 transition">
+                Firework
+            </button>
+            <button id="btn-spawn-ship" onclick="toggleSpawnShip()" class="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-sky-500/25 text-sky-300 hover:bg-sky-500/40 transition">
+                Spawn Kapal
+            </button>
+            <button id="btn-xray" onclick="toggleXray()" class="px-2 py-1 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 transition">
+                X-Ray: ON
+            </button>
+            <button id="btn-traffic" onclick="toggleTraffic()" class="px-2 py-1 rounded-full text-[10px] font-semibold bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 transition">
+                Traffic: ON
+            </button>
+            <button onclick="resetCamera()" class="px-2 py-1 rounded-full text-[10px] font-semibold bg-slate-800/90 text-slate-300 hover:bg-slate-700 transition">
+                Reset
+            </button>
+            <button onclick="toggleUI()" id="btn-toggle-ui" title="Sembunyikan/Tampilkan Kontrol" class="px-2 py-1 rounded-full text-[10px] font-semibold bg-slate-800/90 text-cyan-300 hover:bg-slate-700 transition">
+                Hide UI
+            </button>
+        </div>
+    </div>
+
+    <!-- Bottom Dock Minimalis -->
+    <div id="bottom-dock" class="fixed bottom-2.5 left-1/2 -translate-x-1/2 z-10 w-[96%] max-w-2xl glass-pill px-3 py-2 rounded-2xl shadow-2xl transition-all duration-200">
+        <div class="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5">
+
+            <!-- Servo 1 (Kiri) -->
+            <div class="flex-1 min-w-[110px] bg-slate-900/75 px-2.5 py-1.5 rounded-xl border border-slate-800">
+                <div class="flex justify-between items-center text-[10px]">
+                    <span class="font-bold text-cyan-400">SG90 KIRI</span>
+                    <span id="val-servo-left" class="font-mono text-cyan-300">0°</span>
+                </div>
+                <input type="range" id="slider-left" min="0" max="180" value="0" class="w-full my-1" oninput="manualControl()">
+            </div>
+
+            <!-- Tombol Aksi Cepat -->
+            <div class="flex flex-col items-center gap-1 shrink-0">
+                <div class="flex items-center gap-1.5">
+                    <button onclick="setTargetAngle(180)" class="px-2.5 py-1.5 rounded-lg font-bold text-[10px] bg-cyan-600 hover:bg-cyan-500 text-white transition active:scale-95">
+                        Buka 180°
+                    </button>
+                    <button onclick="setTargetAngle(0)" class="px-2.5 py-1.5 rounded-lg font-bold text-[10px] bg-emerald-600 hover:bg-emerald-500 text-white transition active:scale-95">
+                        Tutup 0°
+                    </button>
+                </div>
+                <div id="status-badge" class="text-[9px] font-medium text-emerald-400 truncate max-w-[215px] text-center">
+                    0° • Tertutup Mulus
+                </div>
+            </div>
+
+            <!-- Servo 2 (Kanan) -->
+            <div class="flex-1 min-w-[110px] bg-slate-900/75 px-2.5 py-1.5 rounded-xl border border-slate-800">
+                <div class="flex justify-between items-center text-[10px]">
+                    <span class="font-bold text-emerald-400">SG90 KANAN</span>
+                    <span id="val-servo-right" class="font-mono text-emerald-300">0°</span>
+                </div>
+                <input type="range" id="slider-right" min="0" max="180" value="0" class="w-full my-1" oninput="manualControl()">
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // --- 1. INISIALISASI SCENE & KAMERA ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x090e1a);
+        scene.fog = new THREE.FogExp2(0x090e1a, 0.0072);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(12.5, 10.5, 23.5);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.08;
+        container.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.target.set(0, 3.0, 0);
+        controls.maxPolarAngle = Math.PI / 2 - 0.02;
+
+        // --- 2. PENCAHAYAAN ---
+        scene.add(new THREE.AmbientLight(0xb8c7d9, 0.92));
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        dirLight.position.set(14, 24, 16);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        const d = 22;
+        dirLight.shadow.camera.left = -d;
+        dirLight.shadow.camera.right = d;
+        dirLight.shadow.camera.top = d;
+        dirLight.shadow.camera.bottom = -d;
+        scene.add(dirLight);
+
+        const leftLight = new THREE.PointLight(0x38bdf8, 0.9, 12);
+        leftLight.position.set(-8.5, 0.5, 0);
+        scene.add(leftLight);
+
+        const rightLight = new THREE.PointLight(0x34d399, 0.9, 12);
+        rightLight.position.set(8.5, 0.5, 0);
+        scene.add(rightLight);
+
+        const pinkSkyLight = new THREE.PointLight(0xff4da6, 2.2, 32);
+        pinkSkyLight.position.set(0, 14.5, -10);
+        scene.add(pinkSkyLight);
+
+        function createGlowParticleTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+            grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+            grad.addColorStop(0.28, 'rgba(255, 130, 195, 0.95)');
+            grad.addColorStop(0.65, 'rgba(255, 45, 145, 0.45)');
+            grad.addColorStop(1, 'rgba(255, 20, 130, 0)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 64, 64);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        const fireworkSpriteTex = createGlowParticleTexture();
+
+        function createFireworkTextPoints(text) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1450;
+            canvas.height = 260;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.font = 'italic bold 115px "New York", "Segoe Script", Georgia, cursive';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+            const targets = [];
+            const step = 4;
+
+            for (let y = 0; y < canvas.height; y += step) {
+                for (let x = 0; x < canvas.width; x += step) {
+                    const idx = (y * canvas.width + x) * 4;
+                    if (imgData[idx] > 140) {
+                        const wx = (x - canvas.width / 2) * 0.02 + (Math.random() - 0.5) * 0.05;
+                        const wy = (canvas.height / 2 - y) * 0.02 + 14.2 + (Math.random() - 0.5) * 0.05;
+                        const wz = -11.5 + (Math.random() - 0.5) * 0.35;
+                        targets.push(new THREE.Vector3(wx, wy, wz));
+                    }
+                }
+            }
+            return targets;
+        }
+
+        const shafaTargets = createFireworkTextPoints('Kelompok 2');
+        const shafaCount = shafaTargets.length;
+        const shafaGeo = new THREE.BufferGeometry();
+        const shafaPositions = new Float32Array(shafaCount * 3);
+        const shafaColors = new Float32Array(shafaCount * 3);
+        const shafaSeeds = new Float32Array(shafaCount);
+
+        for (let i = 0; i < shafaCount; i++) {
+            shafaPositions[i * 3] = 0;
+            shafaPositions[i * 3 + 1] = 14.2;
+            shafaPositions[i * 3 + 2] = -11.5;
+
+            const isBright = Math.random() > 0.35;
+            shafaColors[i * 3] = 1.0;
+            shafaColors[i * 3 + 1] = isBright ? 0.35 + Math.random() * 0.35 : 0.15;
+            shafaColors[i * 3 + 2] = isBright ? 0.72 + Math.random() * 0.25 : 0.58;
+            shafaSeeds[i] = Math.random() * Math.PI * 2;
+        }
+
+        shafaGeo.setAttribute('position', new THREE.BufferAttribute(shafaPositions, 3));
+        shafaGeo.setAttribute('color', new THREE.BufferAttribute(shafaColors, 3));
+
+        const shafaMat = new THREE.PointsMaterial({
+            size: 0.4,
+            map: fireworkSpriteTex,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.96,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending
+        });
+
+        const shafaFireworkPoints = new THREE.Points(shafaGeo, shafaMat);
+        scene.add(shafaFireworkPoints);
+
+        const burstCount = 180;
+        const burstGeo = new THREE.BufferGeometry();
+        const burstPos = new Float32Array(burstCount * 3);
+        const burstVel = [];
+        for (let i = 0; i < burstCount; i++) {
+            burstPos[i * 3] = 0;
+            burstPos[i * 3 + 1] = 14.2;
+            burstPos[i * 3 + 2] = -11.5;
+            burstVel.push(new THREE.Vector3());
+        }
+        burstGeo.setAttribute('position', new THREE.BufferAttribute(burstPos, 3));
+        const burstMat = new THREE.PointsMaterial({
+            size: 0.48,
+            color: 0xff66b2,
+            map: fireworkSpriteTex,
+            transparent: true,
+            opacity: 0.0,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending
+        });
+        const burstPoints = new THREE.Points(burstGeo, burstMat);
+        scene.add(burstPoints);
+
+        let fireworkProgress = 0;
+        let burstLife = 0;
+
+        function launchSkyFirework() {
+            fireworkProgress = 0.05;
+            burstLife = 1.0;
+            const originX = (Math.random() - 0.5) * 11.0;
+            const originY = 14.2 + (Math.random() - 0.5) * 2.0;
+            const originZ = -11.8;
+
+            const posArr = burstGeo.attributes.position.array;
+            for (let i = 0; i < burstCount; i++) {
+                posArr[i * 3] = originX;
+                posArr[i * 3 + 1] = originY;
+                posArr[i * 3 + 2] = originZ;
+
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(2 * Math.random() - 1);
+                const spd = 0.06 + Math.random() * 0.14;
+                burstVel[i].set(
+                    Math.sin(phi) * Math.cos(theta) * spd,
+                    Math.cos(phi) * spd,
+                    Math.sin(phi) * Math.sin(theta) * spd * 0.4
+                );
+            }
+            burstGeo.attributes.position.needsUpdate = true;
+        }
+
+        launchSkyFirework();
+        setInterval(launchSkyFirework, 4800);
+
+        // --- 3. MATERIAL COKELAT MUDA, JALAN ASPAL & TROTOAR ---
+        const matWater = new THREE.MeshStandardMaterial({
+            color: 0x3b82f6, roughness: 0.35, metalness: 0.15
+        });
+        const matBasePlinth = new THREE.MeshStandardMaterial({
+            color: 0x2563eb, roughness: 0.55, metalness: 0.1
+        });
+        const matStoneCream = new THREE.MeshStandardMaterial({
+            color: 0xc69c6d, roughness: 0.72, metalness: 0.05
+        });
+        const matStoneTrim = new THREE.MeshStandardMaterial({
+            color: 0xa67b5b, roughness: 0.78, metalness: 0.06
+        });
+        const matTowerBlue = new THREE.MeshStandardMaterial({
+            color: 0x7dd3fc, roughness: 0.45, metalness: 0.25
+        });
+        const matGoldAccent = new THREE.MeshStandardMaterial({
+            color: 0xeab308, roughness: 0.35, metalness: 0.7
+        });
+
+        const ROAD_TOP_Y = 1.18;
+        const ROAD_WIDTH = 5.4;
+        const SIDEWALK_WIDTH = 0.76;
+        const SIDEWALK_HEIGHT = 0.08;
+        const SIDEWALK_Z = 2.02;
+        const BRIDGE_RAIL_Z = 2.44;
+        const ROAD_RAIL_Z = 2.66;
+
+        const matRoad = new THREE.MeshStandardMaterial({ color: 0x262b34, roughness: 0.88, metalness: 0.08 });
+        const matSidewalk = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.82, metalness: 0.05 });
+        const matSidewalkCurb = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.75, metalness: 0.05 });
+        const matUnderGirder = new THREE.MeshStandardMaterial({ color: 0x7dd3fc, roughness: 0.42, metalness: 0.35 });
+        const matGuideRail = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.4, metalness: 0.45 });
+
+        const matGuardRail = new THREE.MeshStandardMaterial({ color: 0xd9b382, roughness: 0.42, metalness: 0.3 });
+        const matGuardPost = new THREE.MeshStandardMaterial({ color: 0x9c6f44, roughness: 0.68, metalness: 0.12 });
+        const matReflector = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+        const matSlotTrim = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.4, metalness: 0.4 });
+
+        let isXray = true;
+        const matChamberWall = new THREE.MeshStandardMaterial({
+            color: 0xb08256, roughness: 0.7, transparent: true, opacity: 0.25
+        });
+        const matApproachRoof = new THREE.MeshStandardMaterial({
+            color: 0x262b34, roughness: 0.88, metalness: 0.08, transparent: true, opacity: 0.55
+        });
+        const matPocketHousing = new THREE.MeshStandardMaterial({
+            color: 0xd4af87, roughness: 0.52, metalness: 0.2, transparent: true, opacity: 0.35
+        });
+
+        const matSG90Blue = new THREE.MeshPhysicalMaterial({
+            color: 0x1d4ed8, roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.9
+        });
+        const matSG90Label = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+        const matServoHornWhite = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.3 });
+        const matScrew = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.25, metalness: 0.85 });
+        const matMetalRod = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.3, metalness: 0.8 });
+        const matServoTester = new THREE.MeshStandardMaterial({ color: 0x059669, roughness: 0.4 });
+        const matTire = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.9 });
+
+        function createSidewalkStrip(length, isFront) {
+            const swGroup = new THREE.Group();
+            const zSign = isFront ? 1 : -1;
+
+            const slab = new THREE.Mesh(
+                new THREE.BoxGeometry(length, SIDEWALK_HEIGHT, SIDEWALK_WIDTH),
+                matSidewalk
+            );
+            slab.position.set(0, ROAD_TOP_Y + SIDEWALK_HEIGHT / 2, zSign * SIDEWALK_Z);
+            slab.receiveShadow = true;
+            swGroup.add(slab);
+
+            const curb = new THREE.Mesh(
+                new THREE.BoxGeometry(length, SIDEWALK_HEIGHT + 0.015, 0.08),
+                matSidewalkCurb
+            );
+            curb.position.set(
+                0,
+                ROAD_TOP_Y + (SIDEWALK_HEIGHT + 0.015) / 2,
+                zSign * (SIDEWALK_Z - SIDEWALK_WIDTH / 2 + 0.04)
+            );
+            swGroup.add(curb);
+
+            const jointCount = Math.floor(length / 1.1);
+            for (let i = 0; i < jointCount; i++) {
+                const jx = -length / 2 + 0.55 + i * 1.1;
+                const joint = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.03, 0.008, SIDEWALK_WIDTH - 0.1),
+                    matRoad
+                );
+                joint.position.set(jx, ROAD_TOP_Y + SIDEWALK_HEIGHT + 0.003, zSign * SIDEWALK_Z);
+                swGroup.add(joint);
+            }
+
+            return swGroup;
+        }
+
+        function createGuardrailSegment(length, postCount) {
+            const segGroup = new THREE.Group();
+            const postHeight = 0.42;
+
+            const topBeam = new THREE.Mesh(new THREE.BoxGeometry(length, 0.075, 0.055), matGuardRail);
+            topBeam.position.set(0, ROAD_TOP_Y + postHeight - 0.05, 0);
+            topBeam.castShadow = true;
+            segGroup.add(topBeam);
+
+            const midBeam = new THREE.Mesh(new THREE.BoxGeometry(length, 0.048, 0.045), matGuardRail);
+            midBeam.position.set(0, ROAD_TOP_Y + postHeight * 0.52, 0);
+            segGroup.add(midBeam);
+
+            for (let i = 0; i < postCount; i++) {
+                const t = postCount === 1 ? 0.5 : i / (postCount - 1);
+                const px = -length / 2 + 0.2 + t * Math.max(0.01, length - 0.4);
+
+                const post = new THREE.Mesh(new THREE.BoxGeometry(0.065, postHeight, 0.065), matGuardPost);
+                post.position.set(px, ROAD_TOP_Y + postHeight / 2, 0);
+                post.castShadow = true;
+                segGroup.add(post);
+
+                const reflector = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.048, 0.068), matReflector);
+                reflector.position.set(px, ROAD_TOP_Y + postHeight - 0.05, 0);
+                segGroup.add(reflector);
+            }
+
+            return segGroup;
+        }
+
+        function createGuardrailStoragePocket(dir, zCenter) {
+            const pocketGroup = new THREE.Group();
+            const pocketLength = 4.55;
+            const pocketHeight = 0.54;
+            const slotClearWidth = 0.16;
+            const wallThick = 0.05;
+
+            const centerX = dir * (4.85 + pocketLength / 2);
+            const centerY = ROAD_TOP_Y + pocketHeight / 2;
+
+            const innerWall = new THREE.Mesh(new THREE.BoxGeometry(pocketLength, pocketHeight, wallThick), matPocketHousing);
+            innerWall.position.set(centerX, centerY, zCenter - Math.sign(zCenter) * (slotClearWidth / 2 + wallThick / 2));
+            pocketGroup.add(innerWall);
+
+            const outerWall = new THREE.Mesh(new THREE.BoxGeometry(pocketLength, pocketHeight, wallThick), matPocketHousing);
+            outerWall.position.set(centerX, centerY, zCenter + Math.sign(zCenter) * (slotClearWidth / 2 + wallThick / 2));
+            pocketGroup.add(outerWall);
+
+            const topCap = new THREE.Mesh(
+                new THREE.BoxGeometry(pocketLength, 0.05, slotClearWidth + wallThick * 2),
+                matPocketHousing
+            );
+            topCap.position.set(centerX, ROAD_TOP_Y + pocketHeight + 0.025, zCenter);
+            pocketGroup.add(topCap);
+
+            const backCap = new THREE.Mesh(
+                new THREE.BoxGeometry(0.06, pocketHeight + 0.05, slotClearWidth + wallThick * 2),
+                matPocketHousing
+            );
+            backCap.position.set(centerX + dir * (pocketLength / 2), centerY + 0.025, zCenter);
+            pocketGroup.add(backCap);
+
+            const mouthX = dir * 4.85;
+            const frameInner = new THREE.Mesh(new THREE.BoxGeometry(0.08, pocketHeight + 0.04, 0.045), matSlotTrim);
+            frameInner.position.set(mouthX, centerY + 0.02, zCenter - Math.sign(zCenter) * (slotClearWidth / 2 + 0.02));
+            pocketGroup.add(frameInner);
+
+            const frameOuter = new THREE.Mesh(new THREE.BoxGeometry(0.08, pocketHeight + 0.04, 0.045), matSlotTrim);
+            frameOuter.position.set(mouthX, centerY + 0.02, zCenter + Math.sign(zCenter) * (slotClearWidth / 2 + 0.02));
+            pocketGroup.add(frameOuter);
+
+            const frameTop = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, slotClearWidth + 0.08), matSlotTrim);
+            frameTop.position.set(mouthX, ROAD_TOP_Y + pocketHeight + 0.025, zCenter);
+            pocketGroup.add(frameTop);
+
+            return pocketGroup;
+        }
+
+        // --- 4. ALAS MAKET SUNGAI BIRU & RIAK AIR ---
+        const plinth = new THREE.Mesh(new THREE.BoxGeometry(58, 0.7, 50), matBasePlinth);
+        plinth.position.set(0, -2.45, 0);
+        plinth.receiveShadow = true;
+        scene.add(plinth);
+
+        const water = new THREE.Mesh(new THREE.BoxGeometry(57.4, 1.1, 49.4), matWater);
+        water.position.set(0, -1.55, 0);
+        water.receiveShadow = true;
+        scene.add(water);
+
+        const rippleMat = new THREE.MeshBasicMaterial({ color: 0xdbeafe });
+        for (let i = 0; i < 34; i++) {
+            const rx = ((i * 7.3) % 52) - 26;
+            const rz = ((i * 6.7) % 42) - 21;
+            if (Math.abs(rx) < 12 && Math.abs(rz) < 5) continue;
+            const ripple = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.015, 0.09), rippleMat);
+            ripple.position.set(rx, -0.99, rz);
+            scene.add(ripple);
+        }
+
+        // --- 5. MENARA KEMBAR DENGAN GERBANG TEROWONGAN TROTOAR TEMBUS SEPANJANG SUMBU X ---
+        function createTowerBridgeStructure(isLeft) {
+            const group = new THREE.Group();
+            const dir = isLeft ? -1 : 1;
+            const baseX = dir * 9.8;
+
+            const baseBlock = new THREE.Mesh(new THREE.BoxGeometry(10.0, 1.0, 5.8), matStoneTrim);
+            baseBlock.position.set(baseX, -0.75, 0);
+            baseBlock.receiveShadow = true;
+            group.add(baseBlock);
+
+            const floorChamber = new THREE.Mesh(new THREE.BoxGeometry(9.7, 0.14, 5.2), matChamberWall);
+            floorChamber.position.set(baseX, -0.18, 0);
+            group.add(floorChamber);
+
+            const wallFront = new THREE.Mesh(new THREE.BoxGeometry(9.7, 1.05, 0.24), matChamberWall);
+            wallFront.position.set(baseX, 0.415, 2.48);
+            group.add(wallFront);
+
+            const wallBack = new THREE.Mesh(new THREE.BoxGeometry(9.7, 1.05, 0.24), matChamberWall);
+            wallBack.position.set(baseX, 0.415, -2.48);
+            group.add(wallBack);
+
+            const wallOuter = new THREE.Mesh(new THREE.BoxGeometry(0.28, 1.05, 5.2), matChamberWall);
+            wallOuter.position.set(baseX + (dir * 4.72), 0.415, 0);
+            group.add(wallOuter);
+
+            const topRoad = new THREE.Mesh(new THREE.BoxGeometry(10.0, 0.24, ROAD_WIDTH), matApproachRoof);
+            topRoad.position.set(baseX, ROAD_TOP_Y - 0.12, 0);
+            topRoad.receiveShadow = true;
+            group.add(topRoad);
+
+            const outerApproach = new THREE.Mesh(new THREE.BoxGeometry(8.2, 0.24, ROAD_WIDTH), matRoad);
+            outerApproach.position.set(baseX + dir * 9.1, ROAD_TOP_Y - 0.12, 0);
+            outerApproach.receiveShadow = true;
+            group.add(outerApproach);
+
+            [true, false].forEach(isFront => {
+                const swAbutment = createSidewalkStrip(10.0, isFront);
+                swAbutment.position.set(baseX, 0, 0);
+                group.add(swAbutment);
+
+                const swOuter = createSidewalkStrip(8.2, isFront);
+                swOuter.position.set(baseX + dir * 9.1, 0, 0);
+                group.add(swOuter);
+            });
+
+            for (let mx = -2.8; mx <= 2.8; mx += 1.4) {
+                const dash = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.65, 0.015, 0.11),
+                    new THREE.MeshBasicMaterial({ color: 0xfef08a })
+                );
+                dash.position.set(baseX + dir * 9.1 + mx, ROAD_TOP_Y + 0.008, 0);
+                group.add(dash);
+            }
+
+            [-1.75, 1.75].forEach(zPos => {
+                const rail = new THREE.Mesh(new THREE.BoxGeometry(9.2, 0.08, 0.14), matGuideRail);
+                rail.position.set(baseX, -0.07, zPos);
+                group.add(rail);
+            });
+
+            [-BRIDGE_RAIL_Z, BRIDGE_RAIL_Z].forEach(zPos => {
+                group.add(createGuardrailStoragePocket(dir, zPos));
+            });
+
+            [-ROAD_RAIL_Z, ROAD_RAIL_Z].forEach(zPos => {
+                const railAbutment = createGuardrailSegment(9.8, 5);
+                railAbutment.position.set(baseX, 0, zPos);
+                group.add(railAbutment);
+
+                const railOuter = createGuardrailSegment(8.0, 4);
+                railOuter.position.set(baseX + dir * 9.1, 0, zPos);
+                group.add(railOuter);
+            });
+
+            const towerX = dir * 5.35;
+            [-1, 1].forEach(zSide => {
+                const innerTowerZ = zSide * 2.02;
+                const outerTowerZ = zSide * 3.08;
+
+                const innerTower = new THREE.Group();
+                innerTower.position.set(towerX, 0, innerTowerZ);
+
+                const subFoot = new THREE.Mesh(new THREE.BoxGeometry(1.96, 2.20, 0.80), matStoneTrim);
+                subFoot.position.set(0, 0.08, 0);
+                subFoot.castShadow = true;
+                subFoot.receiveShadow = true;
+                innerTower.add(subFoot);
+
+                [-0.42, 0.42].forEach(sideZ => {
+                    const sideCol = new THREE.Mesh(new THREE.BoxGeometry(1.76, 1.28, 0.16), matStoneTrim);
+                    sideCol.position.set(0, 1.82, sideZ);
+                    sideCol.castShadow = true;
+                    sideCol.receiveShadow = true;
+                    innerTower.add(sideCol);
+                });
+
+                const portalLintel = new THREE.Mesh(new THREE.BoxGeometry(1.96, 0.20, 0.84), matStoneTrim);
+                portalLintel.position.set(0, 2.46, 0);
+                portalLintel.castShadow = true;
+                innerTower.add(portalLintel);
+
+                const innerShaft = new THREE.Mesh(new THREE.BoxGeometry(1.88, 5.79, 0.68), matStoneCream);
+                innerShaft.position.set(0, 5.455, 0);
+                innerShaft.castShadow = true;
+                innerShaft.receiveShadow = true;
+                innerTower.add(innerShaft);
+
+                [4.6, 6.8].forEach(wy => {
+                    const ledge = new THREE.Mesh(new THREE.BoxGeometry(2.02, 0.16, 0.78), matStoneTrim);
+                    ledge.position.set(0, wy, 0);
+                    innerTower.add(ledge);
+
+                    [-0.45, 0.45].forEach(wx => {
+                        const win = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.55, 0.74), matTowerBlue);
+                        win.position.set(wx, wy + 0.85, 0);
+                        innerTower.add(win);
+                    });
+                });
+
+                const innerRoof = new THREE.Mesh(new THREE.ConeGeometry(1.12, 1.85, 4), matStoneCream);
+                innerRoof.rotation.y = Math.PI / 4;
+                innerRoof.position.set(0, 9.27, 0);
+                innerRoof.castShadow = true;
+                innerTower.add(innerRoof);
+
+                const innerSpire = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.6, 8), matGoldAccent);
+                innerSpire.position.set(0, 10.45, 0);
+                innerTower.add(innerSpire);
+
+                group.add(innerTower);
+
+                const outerTower = new THREE.Group();
+                outerTower.position.set(towerX, 0, outerTowerZ);
+
+                const outerPier = new THREE.Mesh(new THREE.BoxGeometry(2.25, 1.75, 0.78), matStoneTrim);
+                outerPier.position.set(0, -0.15, 0);
+                outerPier.castShadow = true;
+                outerPier.receiveShadow = true;
+                outerTower.add(outerPier);
+
+                const outerShaft = new THREE.Mesh(new THREE.BoxGeometry(1.88, 7.6, 0.68), matStoneCream);
+                outerShaft.position.set(0, 4.5, 0);
+                outerShaft.castShadow = true;
+                outerShaft.receiveShadow = true;
+                outerTower.add(outerShaft);
+
+                [2.4, 4.6, 6.8].forEach(wy => {
+                    const ledge = new THREE.Mesh(new THREE.BoxGeometry(2.02, 0.16, 0.78), matStoneTrim);
+                    ledge.position.set(0, wy, 0);
+                    outerTower.add(ledge);
+
+                    [-0.45, 0.45].forEach(wx => {
+                        const win = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.55, 0.74), matTowerBlue);
+                        win.position.set(wx, wy + 0.85, 0);
+                        outerTower.add(win);
+                    });
+                });
+
+                const outerRoof = new THREE.Mesh(new THREE.ConeGeometry(1.12, 1.85, 4), matStoneCream);
+                outerRoof.rotation.y = Math.PI / 4;
+                outerRoof.position.set(0, 9.22, 0);
+                outerRoof.castShadow = true;
+                outerTower.add(outerRoof);
+
+                const outerSpire = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.6, 8), matGoldAccent);
+                outerSpire.position.set(0, 10.4, 0);
+                outerTower.add(outerSpire);
+
+                group.add(outerTower);
+
+                const bridgeTie = new THREE.Mesh(new THREE.BoxGeometry(1.88, 0.34, 1.6), matStoneCream);
+                bridgeTie.position.set(towerX, 2.62, zSide * 2.55);
+                group.add(bridgeTie);
+
+                const cableCurve = new THREE.CatmullRomCurve3([
+                    new THREE.Vector3(towerX, 6.4, zSide * 2.55),
+                    new THREE.Vector3(towerX + dir * 3.8, 3.6, zSide * 2.55),
+                    new THREE.Vector3(towerX + dir * 7.6, ROAD_TOP_Y + 0.25, zSide * 2.55)
+                ]);
+                const cableMesh = new THREE.Mesh(
+                    new THREE.TubeGeometry(cableCurve, 22, 0.11, 8, false),
+                    matTowerBlue
+                );
+                cableMesh.castShadow = true;
+                group.add(cableMesh);
+            });
+
+            scene.add(group);
+        }
+
+        createTowerBridgeStructure(true);
+        createTowerBridgeStructure(false);
+
+        const walkwayY = 6.9;
+        [-2.55, 2.55].forEach(tz => {
+            const walkwayDeck = new THREE.Mesh(new THREE.BoxGeometry(10.7, 0.22, 1.15), matStoneCream);
+            walkwayDeck.position.set(0, walkwayY, tz);
+            walkwayDeck.castShadow = true;
+            scene.add(walkwayDeck);
+
+            const walkwayTrussTop = new THREE.Mesh(new THREE.BoxGeometry(10.7, 0.18, 1.18), matTowerBlue);
+            walkwayTrussTop.position.set(0, walkwayY + 0.95, tz);
+            walkwayTrussTop.castShadow = true;
+            scene.add(walkwayTrussTop);
+
+            for (let x = -4.6; x <= 4.6; x += 0.92) {
+                const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.85, 1.14), matTowerBlue);
+                post.position.set(x, walkwayY + 0.45, tz);
+                scene.add(post);
+            }
+        });
+
+        // --- 6. DAUN JEMBATAN ASPAL + TROTOAR + PAGAR YANG MASUK KE BOKS PENYIMPANAN ---
+        const DECK_LENGTH = 4.8;
+        const BRACKET_OFFSET_FROM_CENTER = DECK_LENGTH / 2 - 0.35;
+
+        function createSeamlessBridgeLeaf(isLeft) {
+            const leafGroup = new THREE.Group();
+            const dir = isLeft ? -1 : 1;
+
+            const deckThickness = 0.24;
+            const deck = new THREE.Mesh(new THREE.BoxGeometry(DECK_LENGTH, deckThickness, ROAD_WIDTH), matRoad);
+            deck.position.set(0, ROAD_TOP_Y - deckThickness / 2, 0);
+            deck.castShadow = true;
+            deck.receiveShadow = true;
+            leafGroup.add(deck);
+
+            [true, false].forEach(isFront => {
+                const leafSidewalk = createSidewalkStrip(DECK_LENGTH, isFront);
+                leafGroup.add(leafSidewalk);
+            });
+
+            [-1.2, 1.2].forEach(xPos => {
+                const stripe = new THREE.Mesh(
+                    new THREE.BoxGeometry(1.1, 0.015, 0.11),
+                    new THREE.MeshBasicMaterial({ color: 0xf8fafc })
+                );
+                stripe.position.set(xPos, ROAD_TOP_Y + 0.008, 0);
+                leafGroup.add(stripe);
+            });
+
+            [-BRIDGE_RAIL_Z, BRIDGE_RAIL_Z].forEach(zPos => {
+                const leafRail = createGuardrailSegment(DECK_LENGTH - 0.14, 3);
+                leafRail.position.set(0, 0, zPos);
+                leafGroup.add(leafRail);
+            });
+
+            [-1.75, 1.75].forEach(zPos => {
+                const girder = new THREE.Mesh(new THREE.BoxGeometry(DECK_LENGTH - 0.2, 0.15, 0.18), matUnderGirder);
+                girder.position.set(0, ROAD_TOP_Y - deckThickness - 0.075, zPos);
+                girder.castShadow = true;
+                leafGroup.add(girder);
+            });
+
+            const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.28, 0.36), matMetalRod);
+            bracket.position.set(dir * BRACKET_OFFSET_FROM_CENTER, 0.72, 0);
+            leafGroup.add(bracket);
+
+            const wheelGeo = new THREE.CylinderGeometry(0.14, 0.14, 0.14, 16);
+            wheelGeo.rotateX(Math.PI / 2);
+            [-1.75, 1.75].forEach(zPos => {
+                const strut = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.72, 0.12), matUnderGirder);
+                strut.position.set(dir * (DECK_LENGTH / 2 - 0.4), 0.44, zPos);
+                leafGroup.add(strut);
+
+                const wheel = new THREE.Mesh(wheelGeo, matMetalRod);
+                wheel.position.set(dir * (DECK_LENGTH / 2 - 0.4), 0.11, zPos);
+                leafGroup.add(wheel);
+            });
+
+            scene.add(leafGroup);
+            return leafGroup;
+        }
+
+        const leftLeaf = createSeamlessBridgeLeaf(true);
+        const rightLeaf = createSeamlessBridgeLeaf(false);
+
+        // --- 7. 2x MICRO SERVO SG90 (TUAS SILANG PUTIH) SEPENUHNYA DI DALAM KOLONG ---
+        const CRANK_RADIUS = 1.95;
+        const ROD_LENGTH = 3.20;
+
+        function createSG90Assembly(isLeft) {
+            const dir = isLeft ? -1 : 1;
+            const servoX = dir * 9.8;
+            const servoY = -0.11;
+            const servoZ = 0;
+
+            const sg90Group = new THREE.Group();
+            sg90Group.position.set(servoX, servoY, servoZ);
+
+            const mount = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.12, 0.9), matStoneTrim);
+            mount.position.set(0, 0.06, 0);
+            sg90Group.add(mount);
+
+            const body = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.56, 0.48), matSG90Blue);
+            body.position.set(0, 0.36, 0);
+            sg90Group.add(body);
+
+            const ears = new THREE.Mesh(new THREE.BoxGeometry(1.42, 0.06, 0.48), matSG90Blue);
+            ears.position.set(0, 0.48, 0);
+            sg90Group.add(ears);
+
+            const label = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.28, 0.5), matSG90Label);
+            label.position.set(0, 0.36, 0);
+            sg90Group.add(label);
+
+            const gearCap = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.14, 16), matSG90Blue);
+            gearCap.position.set(dir * -0.2, 0.68, 0);
+            sg90Group.add(gearCap);
+
+            const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.1, 16), matServoHornWhite);
+            shaft.position.set(dir * -0.2, 0.77, 0);
+            sg90Group.add(shaft);
+
+            scene.add(sg90Group);
+
+            const pivotX = servoX + (dir * -0.2);
+            const pivotY = servoY + 0.82;
+
+            const hornPivot = new THREE.Group();
+            hornPivot.position.set(pivotX, pivotY, 0);
+
+            const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.06, 16), matServoHornWhite);
+            hornPivot.add(hub);
+
+            const screw = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.08, 12), matScrew);
+            hornPivot.add(screw);
+
+            const mainArm = new THREE.Mesh(new THREE.BoxGeometry(CRANK_RADIUS + 0.42, 0.055, 0.14), matServoHornWhite);
+            mainArm.position.set((CRANK_RADIUS - 0.42) / 2, 0, 0);
+            hornPivot.add(mainArm);
+
+            const crossArm = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.055, 0.68), matServoHornWhite);
+            hornPivot.add(crossArm);
+
+            const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.12, 12), matMetalRod);
+            pin.position.set(CRANK_RADIUS, -0.03, 0);
+            hornPivot.add(pin);
+
+            scene.add(hornPivot);
+
+            const rodGeo = new THREE.CylinderGeometry(0.038, 0.038, 1, 10);
+            rodGeo.rotateZ(Math.PI / 2);
+            const connectingRod = new THREE.Mesh(rodGeo, matMetalRod);
+            scene.add(connectingRod);
+
+            const testerGroup = new THREE.Group();
+            testerGroup.position.set(dir * 7.6, ROAD_TOP_Y + 0.12, 3.35);
+
+            const testerBox = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.24, 0.65), matServoTester);
+            testerGroup.add(testerBox);
+
+            const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.18, 16), matServoHornWhite);
+            knob.position.set(0.2, 0.18, 0);
+            const indicator = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.04, 0.04), new THREE.MeshBasicMaterial({ color: 0xef4444 }));
+            indicator.position.set(0.07, 0.1, 0);
+            knob.add(indicator);
+            testerGroup.add(knob);
+
+            const cableCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(servoX, servoY + 0.3, 0.25),
+                new THREE.Vector3(servoX + dir * 0.8, 0.35, 2.95),
+                new THREE.Vector3(dir * 7.6, ROAD_TOP_Y + 0.05, 3.35)
+            ]);
+            const cable = new THREE.Mesh(
+                new THREE.TubeGeometry(cableCurve, 20, 0.032, 8, false),
+                new THREE.MeshBasicMaterial({ color: 0xf97316 })
+            );
+            scene.add(cable);
+            scene.add(testerGroup);
+
+            return { pivotX, pivotY, hornPivot, connectingRod, knob };
+        }
+
+        const leftSG90 = createSG90Assembly(true);
+        const rightSG90 = createSG90Assembly(false);
+
+        // --- 8. BUS TINGKAT MERAH KHAS TOWER BRIDGE ---
+        function createDoubleDeckerBus() {
+            const bus = new THREE.Group();
+
+            const wheelRadius = 0.2;
+            const wheelGeo = new THREE.CylinderGeometry(wheelRadius, wheelRadius, 0.14, 16);
+            wheelGeo.rotateX(Math.PI / 2);
+
+            [[-0.65, wheelRadius, 0.45], [0.65, wheelRadius, 0.45], [-0.65, wheelRadius, -0.45], [0.65, wheelRadius, -0.45]].forEach(([wx, wy, wz]) => {
+                const wheel = new THREE.Mesh(wheelGeo, matTire);
+                wheel.position.set(wx, wy, wz);
+                wheel.castShadow = true;
+                bus.add(wheel);
+            });
+
+            const matBusRed = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.35, metalness: 0.2 });
+            const lowerDeck = new THREE.Mesh(new THREE.BoxGeometry(2.05, 0.46, 0.94), matBusRed);
+            lowerDeck.position.set(0, 0.46, 0);
+            lowerDeck.castShadow = true;
+            bus.add(lowerDeck);
+
+            const upperDeck = new THREE.Mesh(new THREE.BoxGeometry(2.05, 0.52, 0.96), matBusRed);
+            upperDeck.position.set(0, 0.95, 0);
+            upperDeck.castShadow = true;
+            bus.add(upperDeck);
+
+            const winMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.25 });
+            [-0.62, 0, 0.62].forEach(wx => {
+                const win = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.22, 0.99), winMat);
+                win.position.set(wx, 0.98, 0);
+                bus.add(win);
+            });
+
+            return bus;
+        }
+
+        const carRightbound = createDoubleDeckerBus();
+        carRightbound.position.set(-22, ROAD_TOP_Y, 0.95);
+        scene.add(carRightbound);
+
+        const carLeftbound = createDoubleDeckerBus();
+        carLeftbound.rotation.y = Math.PI;
+        carLeftbound.position.set(22, ROAD_TOP_Y, -0.95);
+        scene.add(carLeftbound);
+
+        // --- 8B. PEJALAN KAKI BERANIMASI DI TROTOAR & LARI EVAKUASI SAAT KAPAL TERSPAWN ---
+        const shirtColors = [0x38bdf8, 0xf43f5e, 0xfacc15, 0xa855f7, 0x10b981, 0xf97316, 0xec4899, 0x60a5fa];
+        const pantsColors = [0x1e293b, 0x334155, 0x1d4ed8, 0x475569, 0x3f3f46];
+        const skinColors = [0xfde68a, 0xfcd34d, 0xd97706, 0xe7c697, 0xc68642];
+
+        function createPedestrian(shirtColor, pantsColor, skinColor) {
+            const person = new THREE.Group();
+
+            const matSkin = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.6 });
+            const matShirt = new THREE.MeshStandardMaterial({ color: shirtColor, roughness: 0.7 });
+            const matPants = new THREE.MeshStandardMaterial({ color: pantsColor, roughness: 0.8 });
+            const matHair = new THREE.MeshStandardMaterial({ color: 0x1e1b18, roughness: 0.85 });
+
+            const torso = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.24, 0.20), matShirt);
+            torso.position.y = 0.34;
+            torso.castShadow = true;
+            person.add(torso);
+
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.13, 0.13), matSkin);
+            head.position.y = 0.53;
+            head.castShadow = true;
+            person.add(head);
+
+            const hair = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.05, 0.14), matHair);
+            hair.position.y = 0.59;
+            person.add(hair);
+
+            const leftLeg = new THREE.Group();
+            leftLeg.position.set(0, 0.22, 0.05);
+            const leftLegMesh = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.22, 0.075), matPants);
+            leftLegMesh.position.y = -0.11;
+            leftLegMesh.castShadow = true;
+            leftLeg.add(leftLegMesh);
+            person.add(leftLeg);
+
+            const rightLeg = new THREE.Group();
+            rightLeg.position.set(0, 0.22, -0.05);
+            const rightLegMesh = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.22, 0.075), matPants);
+            rightLegMesh.position.y = -0.11;
+            rightLegMesh.castShadow = true;
+            rightLeg.add(rightLegMesh);
+            person.add(rightLeg);
+
+            const leftArm = new THREE.Group();
+            leftArm.position.set(0, 0.44, 0.13);
+            const leftArmMesh = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.20, 0.06), matSkin);
+            leftArmMesh.position.y = -0.09;
+            leftArm.add(leftArmMesh);
+            person.add(leftArm);
+
+            const rightArm = new THREE.Group();
+            rightArm.position.set(0, 0.44, -0.13);
+            const rightArmMesh = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.20, 0.06), matSkin);
+            rightArmMesh.position.y = -0.09;
+            rightArm.add(rightArmMesh);
+            person.add(rightArm);
+
+            person.userData = { leftLeg, rightLeg, leftArm, rightArm };
+            return person;
+        }
+
+        const pedestrians = [];
+        const pedestrianConfigs = [
+            { x: -18.5, z: SIDEWALK_Z + 0.04, dir: 1, speed: 0.032 },
+            { x: -10.5, z: SIDEWALK_Z - 0.05, dir: 1, speed: 0.028 },
+            { x: -2.4,  z: SIDEWALK_Z + 0.03, dir: 1, speed: 0.035 },
+            { x: 2.6,   z: SIDEWALK_Z - 0.04, dir: -1, speed: 0.030 },
+            { x: 11.2,  z: SIDEWALK_Z + 0.05, dir: -1, speed: 0.034 },
+            { x: 19.5,  z: SIDEWALK_Z - 0.03, dir: -1, speed: 0.029 },
+            { x: -15.2, z: -SIDEWALK_Z + 0.04, dir: 1, speed: 0.031 },
+            { x: -3.2,  z: -SIDEWALK_Z - 0.04, dir: -1, speed: 0.033 },
+            { x: 3.1,   z: -SIDEWALK_Z + 0.03, dir: 1, speed: 0.027 },
+            { x: 14.6,  z: -SIDEWALK_Z - 0.05, dir: -1, speed: 0.035 }
+        ];
+
+        pedestrianConfigs.forEach((cfg, idx) => {
+            const pMesh = createPedestrian(
+                shirtColors[idx % shirtColors.length],
+                pantsColors[idx % pantsColors.length],
+                skinColors[idx % skinColors.length]
+            );
+            pMesh.position.set(cfg.x, ROAD_TOP_Y + SIDEWALK_HEIGHT, cfg.z);
+            if (cfg.dir === -1) pMesh.rotation.y = Math.PI;
+            scene.add(pMesh);
+
+            pedestrians.push({
+                mesh: pMesh,
+                dir: cfg.dir,
+                speed: cfg.speed,
+                runSpeed: 0.145,
+                phase: idx * 1.15
+            });
+        });
+
+        // --- 9. KAPAL PESIAR BESAR YANG BERSIH & PRESISI ---
+        function createCruiseShip() {
+            const ship = new THREE.Group();
+
+            const matHullNavy = new THREE.MeshStandardMaterial({ color: 0x0f294a, roughness: 0.35, metalness: 0.2 });
+            const matHullWhite = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.28, metalness: 0.1 });
+            const matStripeRed = new THREE.MeshStandardMaterial({ color: 0xe11d48, roughness: 0.35, metalness: 0.15 });
+            const matStripeGold = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.3, metalness: 0.6 });
+            const matWindowGlow = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+            const matPoolBlue = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.15, metalness: 0.1 });
+            const matFunnelBlack = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5 });
+
+            function makeShipHullMesh(width, bodyLen, bowLen, sternRadius, height, yBottom, material) {
+                const hw = width / 2;
+                const halfBody = bodyLen / 2;
+                const shape = new THREE.Shape();
+
+                shape.moveTo(-hw, -halfBody);
+                shape.lineTo(-hw, halfBody);
+                shape.quadraticCurveTo(-hw * 0.45, halfBody + bowLen * 0.55, 0, halfBody + bowLen);
+                shape.quadraticCurveTo(hw * 0.45, halfBody + bowLen * 0.55, hw, halfBody);
+                shape.lineTo(hw, -halfBody);
+                shape.quadraticCurveTo(0, -halfBody - sternRadius, -hw, -halfBody);
+
+                const extrudeGeo = new THREE.ExtrudeGeometry(shape, {
+                    depth: height,
+                    bevelEnabled: false,
+                    curveSegments: 16
+                });
+                extrudeGeo.rotateX(-Math.PI / 2);
+                const mesh = new THREE.Mesh(extrudeGeo, material);
+                mesh.position.y = yBottom;
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                return mesh;
+            }
+
+            const lowerHull = makeShipHullMesh(3.2, 7.6, 2.8, 0.75, 0.78, -1.00, matHullNavy);
+            ship.add(lowerHull);
+
+            const redBand = makeShipHullMesh(3.22, 7.6, 2.82, 0.75, 0.12, -0.22, matStripeRed);
+            ship.add(redBand);
+
+            const mainDeck = makeShipHullMesh(3.16, 7.55, 2.75, 0.74, 0.62, -0.10, matHullWhite);
+            ship.add(mainDeck);
+
+            const cabinDeck2 = makeShipHullMesh(2.76, 6.6, 2.1, 0.62, 0.58, 0.52, matHullWhite);
+            ship.add(cabinDeck2);
+
+            const cabinDeck3 = makeShipHullMesh(2.26, 5.2, 1.45, 0.48, 0.52, 1.10, matHullWhite);
+            ship.add(cabinDeck3);
+
+            const captainBridge = new THREE.Mesh(new THREE.BoxGeometry(3.26, 0.28, 0.68), matHullWhite);
+            captainBridge.position.set(0, 1.48, 2.15);
+            captainBridge.castShadow = true;
+            ship.add(captainBridge);
+
+            const bridgeGlass = new THREE.Mesh(new THREE.BoxGeometry(3.30, 0.14, 0.72), matPoolBlue);
+            bridgeGlass.position.set(0, 1.50, 2.17);
+            ship.add(bridgeGlass);
+
+            const poolRim = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.05, 1.85), matStripeGold);
+            poolRim.position.set(0, 1.645, -1.15);
+            ship.add(poolRim);
+
+            const poolWater = new THREE.Mesh(new THREE.BoxGeometry(1.08, 0.06, 1.68), matPoolBlue);
+            poolWater.position.set(0, 1.65, -1.15);
+            ship.add(poolWater);
+
+            [-1, 1].forEach(side => {
+                for (let z = -3.3; z <= 3.1; z += 0.64) {
+                    const win1 = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.16, 0.34), matWindowGlow);
+                    win1.position.set(side * 1.585, 0.22, z);
+                    ship.add(win1);
+                }
+                for (let z = -2.9; z <= 2.6; z += 0.62) {
+                    const win2 = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.16, 0.32), matWindowGlow);
+                    win2.position.set(side * 1.385, 0.82, z);
+                    ship.add(win2);
+                }
+                for (let z = -2.2; z <= 1.6; z += 0.60) {
+                    const win3 = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.14, 0.28), matWindowGlow);
+                    win3.position.set(side * 1.135, 1.36, z);
+                    ship.add(win3);
+                }
+
+                [-1.6, 0.3].forEach(lz => {
+                    const lifeboat = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.20, 0.92), matStripeGold);
+                    lifeboat.position.set(side * 1.48, 0.64, lz);
+                    lifeboat.castShadow = true;
+                    ship.add(lifeboat);
+                });
+            });
+
+            [-0.1, -1.95].forEach(fz => {
+                const funnelBase = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.68, 0.90), matStripeRed);
+                funnelBase.position.set(0, 1.96, fz);
+                funnelBase.castShadow = true;
+                ship.add(funnelBase);
+
+                const funnelTop = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.22, 0.94), matFunnelBlack);
+                funnelTop.position.set(0, 2.41, fz);
+                funnelTop.castShadow = true;
+                ship.add(funnelTop);
+            });
+
+            const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.075, 1.15, 10), matHullWhite);
+            mast.position.set(0, 2.19, 1.65);
+            ship.add(mast);
+
+            const radarBar = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.06, 0.12), matHullWhite);
+            radarBar.position.set(0, 2.55, 1.65);
+            ship.add(radarBar);
+
+            return ship;
+        }
+
+        const SHIP_SPAWN_Z = -23.5;
+        const SHIP_DESPAWN_Z = 23.5;
+
+        const cruiseShip = createCruiseShip();
+        cruiseShip.position.set(0, 0, SHIP_SPAWN_Z);
+        cruiseShip.visible = false;
+        scene.add(cruiseShip);
+
+        // --- 10. KINEMATIKA CRANK-SLIDER, LALU LINTAS, PEJALAN KAKI & KAPAL PESIAR ---
+        let leftDeg = 0;
+        let rightDeg = 0;
+        let targetLeftDeg = 0;
+        let targetRightDeg = 0;
+        let isAutoMode = false;
+        let isManualOverride = false;
+        let trafficEnabled = true;
+        let shipActive = false;
+        let uiVisible = true;
+        let clockTime = 0;
+
+        const sliderLeft = document.getElementById('slider-left');
+        const sliderRight = document.getElementById('slider-right');
+        const labelLeft = document.getElementById('val-servo-left');
+        const labelRight = document.getElementById('val-servo-right');
+        const statusBadge = document.getElementById('status-badge');
+        const btnSpawnShip = document.getElementById('btn-spawn-ship');
+
+        function refreshSpawnButtonUI() {
+            if (shipActive) {
+                btnSpawnShip.textContent = 'Kapal: AKTIF';
+                btnSpawnShip.className = 'px-2.5 py-1 rounded-full text-[10px] font-semibold bg-cyan-500/30 text-cyan-200 border border-cyan-400/50 hover:bg-cyan-500/45 transition';
+            } else {
+                btnSpawnShip.textContent = 'Spawn Kapal';
+                btnSpawnShip.className = 'px-2.5 py-1 rounded-full text-[10px] font-semibold bg-sky-500/25 text-sky-300 hover:bg-sky-500/40 transition';
+            }
+        }
+
+        function triggerPedestrianEvacuation() {
+            pedestrians.forEach(p => {
+                // Tentukan arah lari menuju ujung terdekat di luar bentang tengah jembatan (|x| >= 6.4)
+                if (Math.abs(p.mesh.position.x) < 6.4) {
+                    p.evacTargetX = p.mesh.position.x < 0 ? -7.2 : 7.2;
+                } else {
+                    p.evacTargetX = p.mesh.position.x < 0 ? -21.5 : 21.5;
+                }
+                p.evacDir = p.evacTargetX >= p.mesh.position.x ? 1 : -1;
+                p.mesh.rotation.y = p.evacDir === 1 ? 0 : Math.PI;
+            });
+        }
+
+        function toggleSpawnShip() {
+            if (!shipActive) {
+                shipActive = true;
+                isManualOverride = false;
+                cruiseShip.position.set(0, 0, SHIP_SPAWN_Z);
+                cruiseShip.visible = true;
+                triggerPedestrianEvacuation();
+            } else {
+                shipActive = false;
+                cruiseShip.visible = false;
+                cruiseShip.position.z = SHIP_SPAWN_Z;
+                if (!isManualOverride) {
+                    isAutoMode = true;
+                    targetLeftDeg = 0;
+                    targetRightDeg = 0;
+                }
+            }
+            refreshSpawnButtonUI();
+        }
+
+        function toggleUI() {
+            uiVisible = !uiVisible;
+            const dock = document.getElementById('bottom-dock');
+            const btn = document.getElementById('btn-toggle-ui');
+            dock.style.display = uiVisible ? 'block' : 'none';
+            btn.textContent = uiVisible ? 'Hide UI' : 'Show UI';
+        }
+
+        function manualControl() {
+            isAutoMode = false;
+            isManualOverride = true;
+            leftDeg = parseFloat(sliderLeft.value);
+            rightDeg = parseFloat(sliderRight.value);
+            targetLeftDeg = leftDeg;
+            targetRightDeg = rightDeg;
+        }
+
+        function setTargetAngle(deg) {
+            isAutoMode = true;
+            isManualOverride = true;
+            if (deg > 0) {
+                triggerPedestrianEvacuation();
+            }
+            targetLeftDeg = deg;
+            targetRightDeg = deg;
+        }
+
+        function toggleXray() {
+            isXray = !isXray;
+            matChamberWall.opacity = isXray ? 0.25 : 0.94;
+            matApproachRoof.opacity = isXray ? 0.55 : 0.96;
+            matPocketHousing.opacity = isXray ? 0.35 : 0.95;
+            document.getElementById('btn-xray').textContent = isXray ? "X-Ray: ON" : "X-Ray: OFF";
+        }
+
+        function toggleTraffic() {
+            trafficEnabled = !trafficEnabled;
+            document.getElementById('btn-traffic').textContent = trafficEnabled ? "Traffic: ON" : "Traffic: OFF";
+        }
+
+        function resetCamera() {
+            camera.position.set(12.5, 10.5, 23.5);
+            controls.target.set(0, 3.0, 0);
+        }
+
+        function updateSideKinematics(isLeft, deg, sg90Obj, leafObj) {
+            const dir = isLeft ? -1 : 1;
+            const rad = THREE.MathUtils.degToRad(deg);
+
+            const worldAngle = isLeft ? rad : (Math.PI - rad);
+            sg90Obj.hornPivot.rotation.y = -worldAngle;
+
+            const pinX = sg90Obj.pivotX + CRANK_RADIUS * Math.cos(worldAngle);
+            const pinZ = CRANK_RADIUS * Math.sin(worldAngle);
+            const pinY = sg90Obj.pivotY - 0.03;
+
+            const dz = -pinZ;
+            const dx = Math.sqrt(Math.max(0.01, ROD_LENGTH * ROD_LENGTH - dz * dz));
+
+            const bracketX = pinX + (-dir * dx);
+            const bracketY = 0.66;
+
+            const leafCenterX = bracketX + (-dir * BRACKET_OFFSET_FROM_CENTER);
+            leafObj.position.x = leafCenterX;
+
+            const slideClearanceY = deg > 0.5 ? -0.02 : 0;
+            leafObj.position.y = slideClearanceY;
+
+            const midX = (pinX + bracketX) / 2;
+            const midY = (pinY + bracketY) / 2;
+            const midZ = pinZ / 2;
+
+            sg90Obj.connectingRod.position.set(midX, midY, midZ);
+            sg90Obj.connectingRod.scale.set(ROD_LENGTH, 1, 1);
+            sg90Obj.connectingRod.lookAt(bracketX, bracketY, 0);
+            sg90Obj.connectingRod.rotateY(Math.PI / 2);
+
+            sg90Obj.knob.rotation.y = -rad;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            clockTime += 0.04;
+
+            // Animasi Kembang Api Langit
+            fireworkProgress = Math.min(1, fireworkProgress + 0.035);
+            const easeOut = 1 - Math.pow(1 - fireworkProgress, 3);
+            const sPos = shafaGeo.attributes.position.array;
+
+            for (let i = 0; i < shafaCount; i++) {
+                const target = shafaTargets[i];
+                const seed = shafaSeeds[i];
+                const shimmerX = Math.cos(clockTime * 1.8 + seed) * 0.035;
+                const shimmerY = Math.sin(clockTime * 2.2 + seed) * 0.045;
+
+                sPos[i * 3] = target.x * easeOut + shimmerX;
+                sPos[i * 3 + 1] = 14.2 + (target.y - 14.2) * easeOut + shimmerY;
+                sPos[i * 3 + 2] = target.z;
+            }
+            shafaGeo.attributes.position.needsUpdate = true;
+            shafaMat.size = 0.4 + Math.sin(clockTime * 3.0) * 0.06;
+
+            if (burstLife > 0) {
+                burstLife = Math.max(0, burstLife - 0.015);
+                burstMat.opacity = burstLife;
+                pinkSkyLight.intensity = 1.6 + burstLife * 2.2;
+                const bPos = burstGeo.attributes.position.array;
+                for (let i = 0; i < burstCount; i++) {
+                    bPos[i * 3] += burstVel[i].x;
+                    bPos[i * 3 + 1] += burstVel[i].y;
+                    bPos[i * 3 + 2] += burstVel[i].z;
+                    burstVel[i].y -= 0.0018;
+                    burstVel[i].multiplyScalar(0.97);
+                }
+                burstGeo.attributes.position.needsUpdate = true;
+            }
+
+            // Gerak Servo Menuju Sudut Target
+            if (isAutoMode) {
+                const speed = 2.4;
+                if (Math.abs(targetLeftDeg - leftDeg) > 0.5) {
+                    leftDeg += (targetLeftDeg > leftDeg ? speed : -speed);
+                    sliderLeft.value = leftDeg;
+                } else {
+                    leftDeg = targetLeftDeg;
+                }
+
+                if (Math.abs(targetRightDeg - rightDeg) > 0.5) {
+                    rightDeg += (targetRightDeg > rightDeg ? speed : -speed);
+                    sliderRight.value = rightDeg;
+                } else {
+                    rightDeg = targetRightDeg;
+                }
+            }
+
+            updateSideKinematics(true, leftDeg, leftSG90, leftLeaf);
+            updateSideKinematics(false, rightDeg, rightSG90, rightLeaf);
+
+            labelLeft.textContent = `${Math.round(leftDeg)}°`;
+            labelRight.textContent = `${Math.round(rightDeg)}°`;
+
+            const leftInnerEdgeX = leftLeaf.position.x + DECK_LENGTH / 2;
+            const rightInnerEdgeX = rightLeaf.position.x - DECK_LENGTH / 2;
+            const bridgeClosedEnough = (leftInnerEdgeX >= -0.02 && rightInnerEdgeX <= 0.02);
+            const bridgeFullyOpen = (leftDeg > 165 && rightDeg > 165);
+
+            // Cek apakah ada pejalan kaki yang masih berada di area bentang tengah jembatan
+            const anyPedInCenter = pedestrians.some(p => Math.abs(p.mesh.position.x) < 6.2);
+
+            // Kontrol kapal pesiar yang di-spawn
+            if (shipActive) {
+                cruiseShip.visible = true;
+                cruiseShip.position.y = Math.sin(clockTime * 0.85) * 0.02;
+                cruiseShip.rotation.z = Math.sin(clockTime * 0.65) * 0.012;
+
+                const shipBowZ = cruiseShip.position.z + 6.6;
+                const shipSternZ = cruiseShip.position.z - 4.6;
+                const shipApproachingBridge = (shipBowZ > -13.5 && shipSternZ < 4.5);
+
+                if (!isManualOverride) {
+                    if (shipApproachingBridge && !anyPedInCenter && targetLeftDeg !== 180) {
+                        isAutoMode = true;
+                        targetLeftDeg = 180;
+                        targetRightDeg = 180;
+                    } else if (!shipApproachingBridge && shipSternZ >= 4.5 && targetLeftDeg !== 0) {
+                        isAutoMode = true;
+                        targetLeftDeg = 0;
+                        targetRightDeg = 0;
+                    }
+                }
+
+                // Kapal melaju melewati jalur tengah hanya jika jembatan sudah cukup terbuka atau kapal sudah melewati zona jembatan
+                if (bridgeFullyOpen || shipSternZ > 3.8 || shipBowZ < -4.2) {
+                    cruiseShip.position.z += 0.075;
+                }
+
+                if (cruiseShip.position.z > SHIP_DESPAWN_Z) {
+                    shipActive = false;
+                    cruiseShip.visible = false;
+                    cruiseShip.position.z = SHIP_SPAWN_Z;
+                    refreshSpawnButtonUI();
+                    if (!isManualOverride) {
+                        isAutoMode = true;
+                        targetLeftDeg = 0;
+                        targetRightDeg = 0;
+                    }
+                }
+            } else {
+                cruiseShip.visible = false;
+            }
+
+            const shouldEvacuateOrHalt =
+                shipActive ||
+                !bridgeClosedEnough ||
+                leftDeg > 0.5 ||
+                rightDeg > 0.5 ||
+                targetLeftDeg > 0.5 ||
+                targetRightDeg > 0.5;
+
+            if (trafficEnabled) {
+                if (!shouldEvacuateOrHalt) {
+                    carRightbound.position.x += 0.085;
+                    if (carRightbound.position.x > 25) carRightbound.position.x = -25;
+
+                    carLeftbound.position.x -= 0.085;
+                    if (carLeftbound.position.x < -25) carLeftbound.position.x = 25;
+
+                    pedestrians.forEach(p => {
+                        p.mesh.position.x += p.dir * p.speed;
+                        if (p.mesh.position.x > 22.8) p.mesh.position.x = -22.8;
+                        if (p.mesh.position.x < -22.8) p.mesh.position.x = 22.8;
+                        p.mesh.rotation.y = p.dir === 1 ? 0 : Math.PI;
+
+                        p.phase += p.speed * 7.5;
+                        const swing = Math.sin(p.phase) * 0.52;
+                        p.mesh.userData.leftLeg.rotation.z = swing;
+                        p.mesh.userData.rightLeg.rotation.z = -swing;
+                        p.mesh.userData.leftArm.rotation.z = -swing * 0.7;
+                        p.mesh.userData.rightArm.rotation.z = swing * 0.7;
+                        p.mesh.position.y = ROAD_TOP_Y + SIDEWALK_HEIGHT + Math.abs(Math.sin(p.phase)) * 0.015;
+                    });
+                } else {
+                    // Bus berhenti agar tidak melintas di atas daun jembatan yang terbuka
+                    pedestrians.forEach(p => {
+                        if (Math.abs(p.mesh.position.x) < 6.4) {
+                            const runDir = p.evacDir || (p.mesh.position.x < 0 ? -1 : 1);
+                            p.mesh.rotation.y = runDir === 1 ? 0 : Math.PI;
+                            p.mesh.position.x += runDir * p.runSpeed;
+
+                            p.phase += p.runSpeed * 12.5;
+                            const runSwing = Math.sin(p.phase) * 0.85;
+                            p.mesh.userData.leftLeg.rotation.z = runSwing;
+                            p.mesh.userData.rightLeg.rotation.z = -runSwing;
+                            p.mesh.userData.leftArm.rotation.z = -runSwing * 0.9;
+                            p.mesh.userData.rightArm.rotation.z = runSwing * 0.9;
+                            p.mesh.position.y = ROAD_TOP_Y + SIDEWALK_HEIGHT + Math.abs(Math.sin(p.phase)) * 0.035;
+                        } else {
+                            p.mesh.userData.leftLeg.rotation.z = 0;
+                            p.mesh.userData.rightLeg.rotation.z = 0;
+                            p.mesh.userData.leftArm.rotation.z = 0;
+                            p.mesh.userData.rightArm.rotation.z = 0;
+                            p.mesh.position.y = ROAD_TOP_Y + SIDEWALK_HEIGHT;
+                        }
+                    });
+                }
+            }
+
+            if (!shipActive && !bridgeFullyOpen && bridgeClosedEnough) {
+                statusBadge.textContent = "0° • Tertutup Mulus (Siap Spawn Kapal)";
+                statusBadge.className = "text-[9px] font-medium text-emerald-400 truncate max-w-[215px] text-center";
+            } else if (shipActive && anyPedInCenter) {
+                statusBadge.textContent = "Pejalan Kaki Lari ke Ujung Jembatan";
+                statusBadge.className = "text-[9px] font-medium text-amber-400 truncate max-w-[215px] text-center";
+            } else if (bridgeFullyOpen) {
+                statusBadge.textContent = shipActive ? "180° • Terbuka, Kapal Pesiar Lewat" : "180° • Terbuka";
+                statusBadge.className = "text-[9px] font-medium text-cyan-400 truncate max-w-[215px] text-center";
+            } else {
+                statusBadge.textContent = "Lalu Lintas Berhenti • SG90 Gerak";
+                statusBadge.className = "text-[9px] font-medium text-amber-400 truncate max-w-[215px] text-center";
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
